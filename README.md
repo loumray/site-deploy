@@ -27,6 +27,7 @@ SRC_PATH=.
 PHP_LINT=TRUE
 CACHE_CLEAR=TRUE
 SCRIPT=
+PREDEPLOY_SCRIPT=
 ```
 
 3. Set an environment variable with your private SSH key, replacing the key file name with your own.
