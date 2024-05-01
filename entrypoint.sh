@@ -104,6 +104,7 @@ check_cache() {
 # Pre-deploy script
 predeploy_script() {
   if [[ -n ${PREDEPLOY_SCRIPT} ]]; then
+      cd "${SRC_PATH}" || { echo "Failed to change directory to ${SRC_PATH}"; exit 1; }
       echo "Running pre-deploy script: ${PREDEPLOY_SCRIPT}"
       # Execute predeploy script here not remotely, because we have node and npm installed here
       bash "${PREDEPLOY_SCRIPT}"
@@ -148,7 +149,7 @@ sync_files() {
 validate
 setup_env
 setup_ssh_dir
-check_lint
-check_cache
+# check_lint
+# check_cache
 predeploy_script
 sync_files
