@@ -40,15 +40,21 @@ setup_env() {
 setup_ssh_dir() {
   echo "setup ssh path"
 
+  SSH_PATH="${HOME}/.ssh"
   if [ ! -d "${HOME}/.ssh" ]; then
       mkdir "${HOME}/.ssh"
-      SSH_PATH="${HOME}/.ssh"
       mkdir "${SSH_PATH}/ctl/"
       # Set Key Perms
       chmod -R 700 "$SSH_PATH"
     else
-      SSH_PATH="${HOME}/.ssh"
       echo "using established SSH KEY path...";
+      mkdir -p "${HOME}/.ssh/ctl"
+  fi
+
+  # Check if control directory exists
+  if [ ! -d "${HOME}/.ssh/ctl" ]; then
+    echo "Creating control directory..."
+    mkdir -p "${HOME}/.ssh/ctl"
   fi
 
   #Copy secret keys to container
@@ -105,11 +111,12 @@ predeploy_script() {
 
 sync_files() {
   #create multiplex connection
+  echo "Attempt multiplex connection"
   ssh -nNf -v -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlMaster=yes -o ControlPath="$SSH_PATH/ctl/%C" -p "${DEPLOY_SSH_PORT}" "$DEPLOY_FULL_HOST"
   echo "!!! MULTIPLEX SSH CONNECTION ESTABLISHED !!!"
 
   # shellcheck disable=SC2086
-  echo "Syncin files"
+  echo "Syncing files"
   rsync --rsh="ssh -v -p ${DEPLOY_SSH_PORT} -i ${DEPLOY_SSHG_KEY_PRIVATE_PATH} -o StrictHostKeyChecking=no -o 'ControlPath=$SSH_PATH/ctl/%C'" ${FLAGS} --exclude-from='/exclude.txt' --chmod=D775,F664 "${SRC_PATH}" "${DEPLOY_DESTINATION}"
 
   #if script or cache is set
