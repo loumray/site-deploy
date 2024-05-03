@@ -51,6 +51,7 @@ setup_ssh_dir() {
       mkdir -p "${HOME}/.ssh/ctl"
   fi
 
+  echo "Check for .ssh/ctl control directory..."
   # Check if control directory exists
   if [ ! -d "${HOME}/.ssh/ctl" ]; then
     echo "Creating control directory..."
