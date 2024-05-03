@@ -141,8 +141,8 @@ sync_files() {
         SCRIPT="&& bash ${SCRIPT}"
       fi
 
-	  echo "run script and run attempt wp cache clear"
-      ssh -v -p ${DEPLOY_SSH_PORT} -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST" "cd ${DEPLOY_SITE_DIR} ${SCRIPT} ${CACHE_CLEAR}"
+	  # echo "run script and run attempt wp cache clear"
+      # ssh -v -p ${DEPLOY_SSH_PORT} -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST" "cd ${DEPLOY_SITE_DIR} ${SCRIPT} ${CACHE_CLEAR}"
   fi
 
   #close multiplex connection
