@@ -13,6 +13,7 @@
 *.bak
 *.swp
 Thumbs.db
+bitbucket-pipelines.yml
 
 # WordPress specific files
 # NOTE:
