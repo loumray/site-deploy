@@ -4,29 +4,22 @@ set -e
 
 validate() {
   # mandatory params
-  : WPE_SSHG_KEY_PRIVATE="${WPE_SSHG_KEY_PRIVATE:?'WPE_SSHG_KEY_PRIVATE variable missing from Repo or Workspace variables.'}"
+  : DEPLOY_SSHG_KEY_PRIVATE="${DEPLOY_SSHG_KEY_PRIVATE:?'DEPLOY_SSHG_KEY_PRIVATE variable missing from Repo or Workspace variables.'}"
+  : DEPLOY_SSH_HOST="${DEPLOY_SSH_HOST:?'Missing deployment ssh host'}"
+  : DEPLOY_SSH_USER="${DEPLOY_SSH_USER:?'Missing deployment ssh user'}"
+  : DEPLOY_SITE_DIR="${DEPLOY_SITE_DIR:?'Missing deployment project directory'}"
   # optional params
+  : DEPLOY_SSH_PORT="${DEPLOY_SSH_PORT:="22"}"
   : REMOTE_PATH="${REMOTE_PATH:=""}"
   : SRC_PATH="${SRC_PATH:="."}"
   : FLAGS="${FLAGS:="-azvr --inplace --exclude=".*""}"
   : PHP_LINT="${PHP_LINT:="FALSE"}"
-  : CACHE_CLEAR="${CACHE_CLEAR:="TRUE"}"
+  : CACHE_CLEAR="${CACHE_CLEAR:="FALSE"}"
   : SCRIPT="${SCRIPT:=""}"
   : PREDEPLOY_SCRIPT="${PREDEPLOY_SCRIPT:=""}"
 }
 
 setup_env() {
-  if [[ -n ${WPE_ENV} ]]; then
-      WPE_ENV_NAME="${WPE_ENV}";
-    elif [[ -n ${PRD_ENV} ]]; then
-      WPE_ENV_NAME="${PRD_ENV}";
-    elif [[ -n ${STG_ENV} ]]; then
-      WPE_ENV_NAME="${STG_ENV}";
-    elif [[ -n ${DEV_ENV} ]]; then
-      WPE_ENV_NAME="${DEV_ENV}";
-    else echo "Failure: Missing environment variable..."  && exit 1;
-  fi
-
   if [[ -n ${GITHUB_ACTIONS} ]]; then
       CICD_VENDOR="wpe_gha";
     elif [[ -n ${BITBUCKET_BUILD_NUMBER} ]]; then
@@ -35,15 +28,13 @@ setup_env() {
   fi
 
   echo "Deploying your code to:"
-  echo "${WPE_ENV_NAME}"
+  echo "${DEPLOY_SITE_DIR}"
 
-  WPE_SSH_HOST="${WPE_ENV_NAME}.ssh.wpengine.net"
   DIR_PATH="${REMOTE_PATH}"
 
-  # Set up WPE user and path
-  WPE_SSH_USER="${WPE_ENV_NAME}"@"${WPE_SSH_HOST}"
-  WPE_FULL_HOST="${CICD_VENDOR}+$WPE_SSH_USER"
-  WPE_DESTINATION="${CICD_VENDOR}+${WPE_SSH_USER}:sites/${WPE_ENV_NAME}"/"${DIR_PATH}"
+  # Set up host and path
+  DEPLOY_FULL_HOST="${DEPLOY_SSH_USER}"@"${DEPLOY_SSH_HOST}"
+  DEPLOY_DESTINATION="${DEPLOY_FULL_HOST}:~/${DEPLOY_SITE_DIR}"/"${DIR_PATH}"
 }
 
 setup_ssh_dir() {
@@ -61,18 +52,18 @@ setup_ssh_dir() {
   fi
 
   #Copy secret keys to container
-  WPE_SSHG_KEY_PRIVATE_PATH="${SSH_PATH}/wpe_id_rsa"
+  DEPLOY_SSHG_KEY_PRIVATE_PATH="${SSH_PATH}/deploy_id_rsa"
 
   if [ "${CICD_VENDOR}" == "wpe_bb" ]; then
     # Only Bitbucket keys require base64 decode
-    umask  077 ; echo "${WPE_SSHG_KEY_PRIVATE}" | base64 -d > "${WPE_SSHG_KEY_PRIVATE_PATH}"
-    else umask  077 ; echo "${WPE_SSHG_KEY_PRIVATE}" > "${WPE_SSHG_KEY_PRIVATE_PATH}"
+    umask  077 ; echo "${DEPLOY_SSHG_KEY_PRIVATE}" | base64 -d > "${DEPLOY_SSHG_KEY_PRIVATE_PATH}"
+    else umask  077 ; echo "${DEPLOY_SSHG_KEY_PRIVATE}" > "${DEPLOY_SSHG_KEY_PRIVATE_PATH}"
   fi
 
-  chmod 600 "${WPE_SSHG_KEY_PRIVATE_PATH}"
+  chmod 600 "${DEPLOY_SSHG_KEY_PRIVATE_PATH}"
   #establish knownhosts
   KNOWN_HOSTS_PATH="${SSH_PATH}/known_hosts"
-  ssh-keyscan -t rsa "${WPE_SSH_HOST}" >> "${KNOWN_HOSTS_PATH}"
+  ssh-keyscan -p "${DEPLOY_SSH_PORT}" -t rsa "${DEPLOY_SSH_HOST}" >> "${KNOWN_HOSTS_PATH}"
   chmod 644 "${KNOWN_HOSTS_PATH}"
 }
 
@@ -114,23 +105,27 @@ predeploy_script() {
 
 sync_files() {
   #create multiplex connection
-  ssh -nNf -v -i "${WPE_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlMaster=yes -o ControlPath="$SSH_PATH/ctl/%C" "$WPE_FULL_HOST"
+  ssh -nNf -v -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlMaster=yes -o ControlPath="$SSH_PATH/ctl/%C" -p "${DEPLOY_SSH_PORT}" "$DEPLOY_FULL_HOST"
   echo "!!! MULTIPLEX SSH CONNECTION ESTABLISHED !!!"
 
   # shellcheck disable=SC2086
-  rsync --rsh="ssh -v -p 22 -i ${WPE_SSHG_KEY_PRIVATE_PATH} -o StrictHostKeyChecking=no -o 'ControlPath=$SSH_PATH/ctl/%C'" ${FLAGS} --exclude-from='/exclude.txt' --chmod=D775,F664 "${SRC_PATH}" "${WPE_DESTINATION}"
+  echo "Syncin files"
+  rsync --rsh="ssh -v -p ${DEPLOY_SSH_PORT} -i ${DEPLOY_SSHG_KEY_PRIVATE_PATH} -o StrictHostKeyChecking=no -o 'ControlPath=$SSH_PATH/ctl/%C'" ${FLAGS} --exclude-from='/exclude.txt' --chmod=D775,F664 "${SRC_PATH}" "${DEPLOY_DESTINATION}"
 
+  #if script or cache is set
   if [[ -n ${SCRIPT} || -n ${CACHE_CLEAR} ]]; then
 
+	  # Script to run post deployment
       if [[ -n ${SCRIPT} ]]; then
-        if ! ssh -v -p 22 -i "${WPE_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$WPE_FULL_HOST" "test -s sites/${WPE_ENV_NAME}/${SCRIPT}"; then
+        if ! ssh -v -p ${DEPLOY_SSH_PORT} -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST" "test -s ${DEPLOY_SITE_DIR}/${SCRIPT}"; then
           status=1
         fi
 
         if [[ $status -ne 0 && -f ${SCRIPT} ]]; then
-          ssh -v -p 22 -i "${WPE_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$WPE_FULL_HOST" "mkdir -p sites/${WPE_ENV_NAME}/$(dirname "${SCRIPT}")"
+		  echo "transfer script"
+          ssh -v -p ${DEPLOY_SSH_PORT} -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST" "mkdir -p ${DEPLOY_SITE_DIR}/$(dirname "${SCRIPT}")"
 
-          rsync --rsh="ssh -v -p 22 -i ${WPE_SSHG_KEY_PRIVATE_PATH} -o StrictHostKeyChecking=no -o 'ControlPath=$SSH_PATH/ctl/%C'" "${SCRIPT}" "${CICD_VENDOR}+$WPE_SSH_USER:sites/$WPE_ENV_NAME/$(dirname "${SCRIPT}")"
+          rsync --rsh="ssh -v -p ${DEPLOY_SSH_PORT} -i ${DEPLOY_SSHG_KEY_PRIVATE_PATH} -o StrictHostKeyChecking=no -o 'ControlPath=$SSH_PATH/ctl/%C'" "${SCRIPT}" "$DEPLOY_FULL_HOST:$DEPLOY_SITE_DIR/$(dirname "${SCRIPT}")"
         fi
       fi
 
@@ -138,11 +133,12 @@ sync_files() {
         SCRIPT="&& bash ${SCRIPT}"
       fi
 
-      ssh -v -p 22 -i "${WPE_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$WPE_FULL_HOST" "cd sites/${WPE_ENV_NAME} ${SCRIPT} ${CACHE_CLEAR}"
+	  echo "run script and run attempt wp cache clear"
+      ssh -v -p ${DEPLOY_SSH_PORT} -i "${DEPLOY_SSHG_KEY_PRIVATE_PATH}" -o StrictHostKeyChecking=no -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST" "cd ${DEPLOY_SITE_DIR} ${SCRIPT} ${CACHE_CLEAR}"
   fi
 
   #close multiplex connection
-  ssh -O exit -o ControlPath="$SSH_PATH/ctl/%C" "$WPE_FULL_HOST"
+  ssh -O exit -o ControlPath="$SSH_PATH/ctl/%C" "$DEPLOY_FULL_HOST"
   echo "closing ssh connection..."
 }
 
@@ -150,6 +146,6 @@ validate
 setup_env
 setup_ssh_dir
 check_lint
-predeploy_script
-check_cache
+# predeploy_script
+# check_cache
 sync_files

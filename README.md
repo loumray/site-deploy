@@ -16,16 +16,19 @@ make clean       # Deletes all tagged versions of the image
 
 You can use this image to deploy a site from your local machine.
 
-1. Build the `wpengine/site-deploy:latest` image with `make build`.
+1. Build the `loumray/site-deploy:latest` image with `make build`.
 2. Change directories into the root of the local site you'd like to deploy.
 3. Create a `.env` file with the following variables, changing their values as needed.
 
 ```sh
-WPE_ENV=yourinstall # The target WP Engine install name.
-REMOTE_PATH=
+DEPLOY_SSH_HOST=mysitecustomhost.com # Target ssh host access to deploy server
+DEPLOY_SSH_USER=mysiteuser # Target server ssh user
+DEPLOY_SITE_DIR=www/mysite # Target server site directory
+DEPLOY_SSH_PORT=22 # target server port number
+REMOTE_PATH= # target server path relative as a subdirectory of DEPLOY_SITE_DIR
 SRC_PATH=.
 PHP_LINT=TRUE
-CACHE_CLEAR=TRUE
+CACHE_CLEAR=FALSE
 SCRIPT=
 PREDEPLOY_SCRIPT=
 ```
@@ -33,15 +36,15 @@ PREDEPLOY_SCRIPT=
 3. Set an environment variable with your private SSH key, replacing the key file name with your own.
 
 ```sh
-export WPE_SSHG_KEY_PRIVATE=`cat ~/.ssh/my_sshg_key_rsa`
+export DEPLOY_SSHG_KEY_PRIVATE=`cat ~/.ssh/my_sshg_key_rsa`
 ```
 4. Run the deploy!
 
 ```sh
  docker run --rm \
-    -e "WPE_SSHG_KEY_PRIVATE" \
+    -e "DEPLOY_SSHG_KEY_PRIVATE" \
     --env-file ./.env \
     -v $(pwd):/site \
     --workdir=/site \
-    wpengine/site-deploy:latest
+    loumray/site-deploy:latest
 ```

@@ -1,6 +1,6 @@
 .PHONY: clean list-images build publish
 
-IMAGE_NAME ?= wpengine/site-deploy
+IMAGE_NAME ?= loumray/site-deploy
 MAJOR_VERSION ?= 1
 MINOR_VERSION ?= 0
 PATCH_VERSION ?= 0
